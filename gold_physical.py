@@ -2,7 +2,11 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
-
+import multiprocessing as mp
+import dash_html_components as html
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'}
+    
 def get_apmex():
     req = requests.get('https://www.apmex.com/category/15000/gold-coins/all?vt=g&f_metalname=gold&f_bulliontype=coin&f_productoz=1+oz&f_mintyear=random&sortby=priceasc')
 
@@ -242,7 +246,8 @@ def get_ebay():
     return df
 
 def _get_bgasc(url):
-    soup = BeautifulSoup(requests.get(url).text, 'lxml')
+    
+    soup = BeautifulSoup(requests.get(url, headers=headers).text, 'lxml')
     price = float([i.text.strip() for i in soup.find_all('div', attrs={'class': 'price'}) if 'As Low As' in i.text.strip() ][0].split(
     'As Low As:')[-1].strip().replace('$','').replace(',',''))
     title = soup.find_all('div', id='breadcrumb')[0].find_all('a')[-1].text
@@ -273,57 +278,70 @@ def get_gold_price():
     
     return gold_spot
 
-def get_all(cash_back = 0.01):
-    
-    df_list = []
+
+def run(f):
     try:
-        df = get_apmex()
-        df_list.append(df)
-    except:
-        pass
+        df = f()
+    except Exception as e:
+        df = pd.DataFrame()
+        print('ERROR {} {}'.format(f, e))
+        
+        
+    return df
+
+def get_all(cash_back = 0.0):
     
-    try:
-        df = get_money_metals()
-        df_list.append(df)
-    except:
-        pass
-    
-    try:
-        df = get_goldeneagle()
-        df_list.append(df)
-    except:
-        pass
-    
-    try:
-        df = get_jmbullion()
-        df_list.append(df)
-    except:
-        pass
-    
-    try:
-        df = get_ebay()
-        df_list.append(df)
-    except:
-        pass
+    args = [
+        get_apmex,
+        get_money_metals,
+        get_goldeneagle,
+        get_jmbullion,
+        get_ebay,
+        get_bgasc,
+    ]
     
     
-    try:
-        df = get_bgasc()
-        df_list.append(df)
-    except:
-        pass
+    pool = mp.Pool()
+    df_list = pool.map(run, args)
+    pool.close()
+    pool.join()
         
     df = pd.concat(df_list, ignore_index=True)
-
     df['tv'] = np.where(df['source'].isin(['ebay']), 1-cash_back, 1)*df['price']
     df.sort_values('tv', inplace=True)
     df.reset_index(drop=True, inplace=True)
     df['o/u'] = df['tv']-get_gold_price()
+    df['o/u'] = df['o/u'].round(0).astype(int)
     df = df[['tv', 'price', 'o/u', 'title', 'source', 'url']]
+    
+    df = df[df['o/u'] >-25]
     return df
 
 
-if __name__=='__main__':
-    df = get_all()
-    df.to_csv('gold.csv', mode='w', index=False)
+def html_table(dataframe, title_column, url_column='url'):
+    rows = []
+    for i in range(len(dataframe)):
+        row = []
+        for col in dataframe.columns:
+            value = dataframe.iloc[i][col]
+            url = dataframe.iloc[i][url_column]
+            # update this depending on which
+            # columns you want to show links for
+            # and what you want those links to be
+            if col == title_column:
+                cell = html.Td(html.A(href=url, children=value))
+                row.append(cell)
+            elif col != url_column:
+                cell = html.Td(children=value)
+                row.append(cell)
+                
+        rows.append(html.Tr(row))
+        
+    return html.Table(
+        # Header
+        [html.Tr([html.Th(col) for col in dataframe.columns if col != url_column ])] +
+
+        rows
+    )
+
     
