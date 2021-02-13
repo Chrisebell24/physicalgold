@@ -34,7 +34,7 @@ def favicon():
     fp = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
     return send_from_directory(fp, 'favicon.ico')
     
-@app.server.route('/apple-icon.png')
+@app.server.route('/apple-touch-icon.png')
 def applePng():
   return send_from_directory(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets'),'apple-touch-icon.png', mimetype='image/png')
 
