@@ -75,6 +75,7 @@ def fast_load_table(fake_button):
         print('reading from file')
         
         data = pickle.load(open( fp, mode='rb' ) )
+        
         df = data['df']
         last_update = data['last_update']
         tbl = [
@@ -109,7 +110,10 @@ def download_gold_data(interval_pull):
         'df': df,
         'last_update': last_update_datetime,
     }
-    pickle.dump(data, open( fp, mode='wb' ))
+    try:
+        pickle.dump(data, open( fp, mode='wb' ))
+    except:
+        pass
     style = {'display': 'none'}
     print('finished long pull')
     return tbl, last_update_datetime, style
